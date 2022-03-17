@@ -1,70 +1,56 @@
-import {
-  WebGLRenderer,
-  Scene,
-  Mesh,
-  MeshBasicMaterial,
-  BoxBufferGeometry,
-  PerspectiveCamera,
-  Quaternion,
-  Euler,
-  Clock,
-} from "three";
-import Worker from "./worker?worker";
-import { TripleBuffer } from "./TripleBuffer";
+import GameWorker from "./GameWorker?worker";
 
-const worker = new Worker();
-const tripleBuffer = new TripleBuffer();
+async function main() {
+  const canvas = document.getElementById("canvas");
 
-const scene = new Scene();
+  const interWorkerChannel = new MessageChannel();
+  const renderWorkerPort = interWorkerChannel.port1;
+  const gameWorkerPort = interWorkerChannel.port2;
 
-const boxMaterial = new MeshBasicMaterial({ color: 0xff0000 });
-const boxGeometry = new BoxBufferGeometry();
-const box = new Mesh(boxGeometry, boxMaterial);
-scene.add(box);
+  const gameWorker = new GameWorker();
+  gameWorker.postMessage(["init", renderWorkerPort], [renderWorkerPort]);
 
-const camera = new PerspectiveCamera(
-  70,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-camera.position.z = 5;
+  const useRenderWorker = window.OffscreenCanvas;
+  let renderWorker;
 
-const renderer = new WebGLRenderer({ antialias: true });
-document.body.appendChild(renderer.domElement);
+  if (useRenderWorker) {
+    console.info("Rendering in WebWorker");
+    const { default: RenderWorker } = await import("./RenderWorker?worker");
+    const renderWorker = new RenderWorker();
+    const offscreenCanvas = canvas.transferControlToOffscreen();
 
-let needsResize = true;
-
-window.addEventListener("resize", () => {
-  needsResize = true;
-});
-
-const euler = new Euler();
-const quat = new Quaternion();
-
-const clock = new Clock();
-
-// Can likely scale this dynamically depending on worker frame rate
-// renderer.setPixelRatio() can be used to scale main thread frame rate
-const workerFrameRate = 60;
-
-renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
-  const frameRate = 1 / dt;
-
-  if (tripleBuffer.swapReadBuffers()) {
-    const rotation = tripleBuffer.read();
-    quat.setFromEuler(euler.fromArray(rotation));
+    renderWorker.postMessage(
+      [
+        "init",
+        gameWorkerPort,
+        offscreenCanvas,
+        canvas.clientWidth,
+        canvas.clientHeight,
+      ],
+      [gameWorkerPort, offscreenCanvas]
+    );
+  } else {
+    console.info("Rendering on Main Thread");
+    renderWorker = await import("./RenderWorker");
+    renderWorker.init(
+      interWorkerChannel.port2,
+      canvas,
+      canvas.clientWidth,
+      canvas.clientHeight
+    );
   }
 
-  if (needsResize) {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }
+  window.addEventListener("resize", () => {
+    if (useRenderWorker) {
+      renderWorker.postMessage([
+        "resize",
+        canvas.clientWidth,
+        canvas.clientHeight,
+      ]);
+    } else {
+      renderWorker.resize(canvas.clientWidth, canvas.clientHeight);
+    }
+  });
+}
 
-  box.quaternion.slerp(quat, workerFrameRate / frameRate);
-  renderer.render(scene, camera);
-});
-
-worker.postMessage([0, workerFrameRate, tripleBuffer.buffers]);
+main().catch(console.error);
