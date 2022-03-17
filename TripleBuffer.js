@@ -1,3 +1,5 @@
+// Ported from https://github.com/p4checo/triplebuffer-sync
+// Which is originally ported from https://github.com/remis-thoughts/blog/blob/master/triple-buffering/src/main/md/triple-buffering.md
 export class TripleBuffer {
   constructor(buffers) {
     if (!buffers) {
