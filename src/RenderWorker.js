@@ -1,4 +1,5 @@
 import {
+  AmbientLight,
   WebGLRenderer,
   Scene,
   Mesh,
@@ -9,6 +10,7 @@ import {
   Euler,
   Clock,
 } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { TripleBuffer } from "./TripleBuffer";
 
 if (typeof window === "undefined") {
@@ -33,7 +35,7 @@ function onMainThreadMessage({ data: [type, ...args] }) {
   }
 }
 
-export function init(
+export async function init(
   gameWorkerPort,
   canvas,
   initCanvasWidth,
@@ -47,9 +49,16 @@ export function init(
 
   const scene = new Scene();
 
-  const boxMaterial = new MeshBasicMaterial({ color: 0xff0000 });
-  const boxGeometry = new BoxBufferGeometry();
-  const box = new Mesh(boxGeometry, boxMaterial);
+  scene.add(new AmbientLight(0xffffff, 0.5));
+
+  // const boxMaterial = new MeshBasicMaterial({ color: 0xff0000 });
+  // const boxGeometry = new BoxBufferGeometry();
+  // const box = new Mesh(boxGeometry, boxMaterial);
+  // scene.add(box);
+
+  const gltfLoader = new GLTFLoader();
+
+  const { scene: box } = await gltfLoader.loadAsync("/OutdoorFestival.glb");
   scene.add(box);
 
   const camera = new PerspectiveCamera(
@@ -58,6 +67,7 @@ export function init(
     0.1,
     1000
   );
+  camera.position.y = 1.6;
   camera.position.z = 5;
 
   const renderer = new WebGLRenderer({ antialias: true, canvas });

@@ -11,7 +11,7 @@ async function main() {
   if (useRenderWorker) {
     console.info("Rendering in WebWorker");
     const { default: RenderWorker } = await import("./RenderWorker?worker");
-    const renderWorker = new RenderWorker();
+    renderWorker = new RenderWorker();
     const offscreenCanvas = canvas.transferControlToOffscreen();
 
     const interWorkerChannel = new MessageChannel();

@@ -41,8 +41,8 @@ function update() {
   const dt = (start - state.then) / 1000;
   state.then = start;
 
-  state.rotation[0] += 0.5 * dt;
-  state.rotation[1] += 0.5 * dt;
+  // state.rotation[0] += 0.5 * dt;
+  // state.rotation[1] += 0.5 * dt;
 
   state.tripleBuffer.write(state.rotation);
   state.tripleBuffer.swapWriteBuffers();
