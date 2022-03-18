@@ -69,7 +69,7 @@ export function init(
 
   // Can likely scale this dynamically depending on worker frame rate
   // renderer.setPixelRatio() can be used to scale main thread frame rate
-  const workerFrameRate = 5;
+  const workerFrameRate = 60;
 
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();

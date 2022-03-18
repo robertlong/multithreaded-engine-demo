@@ -1,4 +1,5 @@
-import GameWorker from "./GameWorker?worker";
+import GameWorker from "./GameWorker?worker&inline";
+import "./live-reload";
 
 async function main() {
   const canvas = document.getElementById("canvas");
