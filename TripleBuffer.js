@@ -13,22 +13,22 @@ export class TripleBuffer {
       this.buffers = buffers;
     }
 
-    this.flagsBuffer = this.buffers[0];
-
     /**
      * readBufferChanged: 0b01000000
      * tempBufferIndex:   0b00xx0000
      * writeBufferIndex:  0b0000xx00
      * readBufferIndex:   0b000000xx
      */
-    this.flags = new Uint8Array(this.flagsBuffer);
+    this.flags = new Uint8Array(this.buffers[0]);
 
     // Initially:
     // readBufferChanged = false
     // tempBufferIndex = 0
     // writeBufferIndex = 1
     // readBufferIndex = 2
-    this.flags[0] = 0x6;
+    if (!buffers) {
+      this.flags[0] = 0x6;
+    }
 
     this.views = [
       new Float32Array(this.buffers[1]),

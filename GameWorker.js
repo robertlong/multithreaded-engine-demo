@@ -1,6 +1,6 @@
 import { TripleBuffer } from "./TripleBuffer";
 
-globalThis.addEventListener("message", onMainThreadMessage);
+globalThis.addEventListener("message", onMessage);
 
 const state = {
   tripleBuffer: null,
@@ -9,25 +9,23 @@ const state = {
   rotation: [0, 0, 0],
 };
 
-function onMainThreadMessage({ data: [type, ...args] }) {
+function onMessage({ data: [type, ...args] }) {
   switch (type) {
     case "init":
       init(...args);
+      break;
+    case "start":
+      start(...args);
       break;
   }
 }
 
 function init(renderWorkerPort) {
   console.log("GameWorker initialized");
-  renderWorkerPort.addEventListener("message", onRenderWorkerMessage);
-  renderWorkerPort.start();
-}
 
-function onRenderWorkerMessage({ data: [type, ...args] }) {
-  switch (type) {
-    case "start":
-      start(...args);
-      break;
+  if (renderWorkerPort) {
+    renderWorkerPort.addEventListener("message", onMessage);
+    renderWorkerPort.start();
   }
 }
 

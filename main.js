@@ -3,13 +3,7 @@ import GameWorker from "./GameWorker?worker";
 async function main() {
   const canvas = document.getElementById("canvas");
 
-  const interWorkerChannel = new MessageChannel();
-  const renderWorkerPort = interWorkerChannel.port1;
-  const gameWorkerPort = interWorkerChannel.port2;
-
   const gameWorker = new GameWorker();
-  gameWorker.postMessage(["init", renderWorkerPort], [renderWorkerPort]);
-
   const useRenderWorker = window.OffscreenCanvas;
   let renderWorker;
 
@@ -18,6 +12,12 @@ async function main() {
     const { default: RenderWorker } = await import("./RenderWorker?worker");
     const renderWorker = new RenderWorker();
     const offscreenCanvas = canvas.transferControlToOffscreen();
+
+    const interWorkerChannel = new MessageChannel();
+    const renderWorkerPort = interWorkerChannel.port1;
+    const gameWorkerPort = interWorkerChannel.port2;
+
+    gameWorker.postMessage(["init", renderWorkerPort], [renderWorkerPort]);
 
     renderWorker.postMessage(
       [
@@ -31,9 +31,10 @@ async function main() {
     );
   } else {
     console.info("Rendering on Main Thread");
+    gameWorker.postMessage(["init", null]);
     renderWorker = await import("./RenderWorker");
     renderWorker.init(
-      interWorkerChannel.port2,
+      gameWorker,
       canvas,
       canvas.clientWidth,
       canvas.clientHeight
