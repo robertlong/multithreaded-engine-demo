@@ -9,9 +9,11 @@
     "preview": "node ./preview-server.js"
   },
   "devDependencies": {
+    "@types/offscreencanvas": "^2019.6.4",
     "chokidar": "^3.5.3",
     "vite": "^2.8.0",
     "vite-plugin-cross-origin-isolation": "^0.1.6",
+    "vite-plugin-worker": "^1.0.5",
     "ws": "^8.5.0"
   },
   "dependencies": {
