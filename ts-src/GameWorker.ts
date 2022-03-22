@@ -3,6 +3,8 @@ import { addView, createCursorBuffer } from './allocator/CursorBuffer'
 import { maxEntities } from "./config";
 import { copyToWriteBuffer, swapWriteBuffer } from "./TripleBuffer";
 
+globalThis.addEventListener("message", onMessage);
+
 const gameBuffer = createCursorBuffer();
 const renderableBuffer = createCursorBuffer();
 

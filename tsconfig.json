@@ -3,10 +3,10 @@
     "module": "esnext",
     "moduleResolution": "Node",
     "target": "esnext",
-    "lib": ["DOM", "webworker", "esnext", "scripthost"],
+    "lib": ["DOM", "esnext", "scripthost"],
     "sourceMap": true,
+    "outDir": "ts-dist",
   },
-  "include": [
-    "node_modules/vite-plugin-worker/client.d.ts"
-  ]
+  "include": ["ts-src"],
+  "exclude": ["docs"],
 }
