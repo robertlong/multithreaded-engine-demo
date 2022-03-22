@@ -1,8 +1,6 @@
 import { TypedArrayConstructor } from "./types";
 import { roundUpToMultiple4, roundUpToMultiple8 } from "./util";
 
-// made TripleBuffer in functional style for easy sharing between workers
-
 const $cursor = Symbol('cursor');
 
 export type StackBuffer = ArrayBuffer & { [$cursor]: number, cursor: number }
