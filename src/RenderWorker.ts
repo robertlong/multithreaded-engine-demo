@@ -35,6 +35,8 @@ const state = {
   scene: null,
 };
 
+const addObject3DQueue = []
+
 function onMainThreadMessage({ data: [type, ...args] }) {
   switch (type) {
     case "init":
@@ -44,14 +46,14 @@ function onMainThreadMessage({ data: [type, ...args] }) {
       resize(args[0], args[1]);
       break;
     case "addEntity": {
-      const eid = args[1];
-      addObject3D(eid, new Mesh(boxGeometry, boxMaterial));
+      const eid = args[0];
+      addObject3DQueue.push(eid)
       break;
     }
   }
 }
 
-const addObject3D = (eid: number, obj: Object3D) => {
+const addObject3D = (eid: number, obj: Object3D = new Mesh(boxGeometry, boxMaterial)) => {
   obj.eid = eid;
   objects.push(obj);
   state.scene.add(obj);
@@ -69,11 +71,13 @@ export const init = async (
   initCanvasWidth,
   initCanvasHeight
 ) => {
+
+  gameWorkerPort.onmessage = onMainThreadMessage
   
   const size = maxEntities
 
   const tripleBuffer = createTripleBuffer();
-  
+
   const TransformViews = tripleBuffer.buffers
     .map(buffer => createCursorBuffer(buffer))
     .map(buffer => ({
@@ -112,7 +116,7 @@ export const init = async (
       1000
     );
     camera.position.y = 1.6;
-    camera.position.z = 5;
+    camera.position.z = 50;
   
     const renderer = new WebGLRenderer({ antialias: true, canvas });
   
@@ -125,10 +129,14 @@ export const init = async (
     // Can likely scale this dynamically depending on worker frame rate
     // renderer.setPixelRatio() can be used to scale main thread frame rate
     const workerFrameRate = 60;
-  
+
     renderer.setAnimationLoop(() => {
       const dt = clock.getDelta();
       const frameRate = 1 / dt;
+
+      while (addObject3DQueue.length) {
+        addObject3D(addObject3DQueue.shift())
+      }
   
       if (swapReadBuffer(tripleBuffer)) {
         const bufferIndex = getReadBufferIndex(tripleBuffer);
@@ -145,7 +153,7 @@ export const init = async (
           const rotation = Transform.rotation[eid];
           quat.setFromEuler(euler.fromArray(rotation));
           pos.fromArray(position);
-          obj.position.lerp(pos);
+          obj.position.lerp(pos, workerFrameRate / frameRate);
           obj.quaternion.slerp(quat, workerFrameRate / frameRate);
         }
 
@@ -161,6 +169,6 @@ export const init = async (
     });
     
     gameWorkerPort.postMessage(["start", workerFrameRate, tripleBuffer]);
-    
+
     console.log("RenderWorker initialized");
 }

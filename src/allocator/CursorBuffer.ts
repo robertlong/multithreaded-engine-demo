@@ -8,18 +8,9 @@ export type CursorBuffer = ArrayBuffer & { [$cursor]: number, cursor: number }
 export const createCursorBuffer = (
   buffer: ArrayBuffer = new ArrayBuffer(1e7 /*10MB*/)
 ): CursorBuffer => {
-  Object.defineProperties(buffer, {
-    [$cursor]: {
-      value: 0,
-      configurable: false,
-      enumerable: false,
-    },
-    cursor: {
-      configurable: false,
-      enumerable: true,
-      writable: false,
-      get() { return this[$cursor] },
-    }
+  buffer[$cursor] = 0;
+  Object.defineProperty(buffer, 'cursor', {
+    get() { return this[$cursor] },
   });
   return buffer as CursorBuffer;
 }
@@ -33,7 +24,7 @@ export const roundCursor = <T extends TypedArrayConstructor>(buffer: CursorBuffe
 export const addView = <T extends TypedArrayConstructor>(buffer: CursorBuffer, type: T, size: number): InstanceType<T> => {
   roundCursor(buffer, type);
 
-  const store = new type(this, buffer[$cursor], size);
+  const store = new type(buffer, buffer[$cursor], size);
   buffer[$cursor] += size * store.BYTES_PER_ELEMENT;
 
   return store as InstanceType<T>;

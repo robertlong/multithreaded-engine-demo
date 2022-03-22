@@ -8,7 +8,7 @@ globalThis.addEventListener("message", onMessage);
 const gameBuffer = createCursorBuffer();
 const renderableBuffer = createCursorBuffer();
 
-const entities = Array(maxEntities);
+const entities = [];
 
 const Transform = {
   position: addViewVector3(renderableBuffer, maxEntities),
@@ -61,12 +61,17 @@ const rndRange = (min, max) => {
 }
 
 const createEntity = (eid: number) => {
-  entities[eid] = eid;
+  entities.push(eid);
   const position = Transform.position[eid];
-  position[0] = rndRange(-1000, 1000);
-  position[1] = rndRange(-1000, 1000);
-  position[2] = rndRange(-1000, 1000);
-  state.renderWorkerPort.postMessage(['addEntity', eid]);
+  position[0] = rndRange(-20, 20);
+  position[1] = rndRange(-20, 20);
+  position[2] = rndRange(-20, 20);
+
+  if (state.renderWorkerPort) {
+    state.renderWorkerPort.postMessage(['addEntity', eid]);
+  } else {
+    globalThis.postMessage(['addEntity', eid])
+  }
 }
 
 function start(frameRate, tripleBuffer) {

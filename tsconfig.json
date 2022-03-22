@@ -9,6 +9,6 @@
     "isolatedModules": true,
     "types": ["vite/client"],
   },
-  "include": ["ts-src"],
+  "include": ["src"],
   "exclude": ["docs"],
 }
