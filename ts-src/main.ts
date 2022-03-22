@@ -5,7 +5,7 @@ async function main() {
   const canvas = document.getElementById("canvas");
 
   const gameWorker = new GameWorker();
-  const useRenderWorker = window.OffscreenCanvas;
+  const useRenderWorker = (window as any).OffscreenCanvas;
   let renderWorker;
 
   if (useRenderWorker) {

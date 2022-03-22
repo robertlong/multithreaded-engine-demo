@@ -6,6 +6,8 @@
     "lib": ["DOM", "esnext", "scripthost"],
     "sourceMap": true,
     "outDir": "ts-dist",
+    "isolatedModules": true,
+    "types": ["vite/client"],
   },
   "include": ["ts-src"],
   "exclude": ["docs"],
