@@ -1,5 +1,5 @@
-import { alloc, createStackBuffer } from "./allocator/fp";
-import { allocMatrix4, allocVector3, allocVector4 } from "./component/transform";
+import { addView, createCursorBuffer } from "./allocator/CursorBuffer";
+import { addViewMatrix4, addViewVector3, addViewVector4 } from "./component/transform";
 import { createTripleBuffer, swapReadBuffer, getReadBufferIndex } from "./TripleBuffer";
 import { maxEntities } from './config';
 import {
@@ -75,17 +75,17 @@ export const init = async (
   const tripleBuffer = createTripleBuffer();
   
   const TransformViews = tripleBuffer.buffers
-    .map(buffer => createStackBuffer(buffer))
+    .map(buffer => createCursorBuffer(buffer))
     .map(buffer => ({
-      position: allocVector3(buffer, size),
-      scale: allocVector3(buffer, size),
-      rotation: allocVector3(buffer, size),
-      quaternion: allocVector4(buffer, size),
+      position: addViewVector3(buffer, size),
+      scale: addViewVector3(buffer, size),
+      rotation: addViewVector3(buffer, size),
+      quaternion: addViewVector4(buffer, size),
       
-      localMatrix: allocMatrix4(buffer, size),
-      worldMatrix: allocMatrix4(buffer, size),
-      matrixAutoUpdate: alloc(buffer, Uint8Array, size),
-      worldMatrixNeedsUpdate: alloc(buffer, Uint8Array, size),
+      localMatrix: addViewMatrix4(buffer, size),
+      worldMatrix: addViewMatrix4(buffer, size),
+      matrixAutoUpdate: addView(buffer, Uint8Array, size),
+      worldMatrixNeedsUpdate: addView(buffer, Uint8Array, size),
     }));
   
     state.canvasWidth = initCanvasWidth;

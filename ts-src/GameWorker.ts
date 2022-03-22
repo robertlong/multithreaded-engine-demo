@@ -1,28 +1,28 @@
-import { allocMatrix4, allocVector3, allocVector4 } from "./component/transform";
-import { alloc, createStackBuffer } from './allocator/fp'
+import { addViewMatrix4, addViewVector3, addViewVector4 } from "./component/transform";
+import { addView, createCursorBuffer } from './allocator/CursorBuffer'
 import { maxEntities } from "./config";
 import { copyToWriteBuffer, swapWriteBuffer } from "./TripleBuffer";
 
-const gameBuffer = createStackBuffer();
-const renderableBuffer = createStackBuffer();
+const gameBuffer = createCursorBuffer();
+const renderableBuffer = createCursorBuffer();
 
 const entities = Array(maxEntities);
 
 const Transform = {
-  position: allocVector3(renderableBuffer, maxEntities),
-  scale: allocVector3(renderableBuffer, maxEntities),
-  rotation: allocVector3(renderableBuffer, maxEntities),
-  quaternion: allocVector4(renderableBuffer, maxEntities),
+  position: addViewVector3(renderableBuffer, maxEntities),
+  scale: addViewVector3(renderableBuffer, maxEntities),
+  rotation: addViewVector3(renderableBuffer, maxEntities),
+  quaternion: addViewVector4(renderableBuffer, maxEntities),
 
-  localMatrix: allocMatrix4(renderableBuffer, maxEntities),
-  worldMatrix: allocMatrix4(renderableBuffer, maxEntities),
-  matrixAutoUpdate: alloc(renderableBuffer, Uint8Array, maxEntities),
-  worldMatrixNeedsUpdate: alloc(renderableBuffer, Uint8Array, maxEntities),
+  localMatrix: addViewMatrix4(renderableBuffer, maxEntities),
+  worldMatrix: addViewMatrix4(renderableBuffer, maxEntities),
+  matrixAutoUpdate: addView(renderableBuffer, Uint8Array, maxEntities),
+  worldMatrixNeedsUpdate: addView(renderableBuffer, Uint8Array, maxEntities),
 
-  parent: alloc(gameBuffer, Uint32Array, maxEntities),
-  firstChild: alloc(gameBuffer, Uint32Array, maxEntities),
-  prevSibling: alloc(gameBuffer, Uint32Array, maxEntities),
-  nextSibling: alloc(gameBuffer, Uint32Array, maxEntities),
+  parent: addView(gameBuffer, Uint32Array, maxEntities),
+  firstChild: addView(gameBuffer, Uint32Array, maxEntities),
+  prevSibling: addView(gameBuffer, Uint32Array, maxEntities),
+  nextSibling: addView(gameBuffer, Uint32Array, maxEntities),
 };
 
 const state = {
