@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@types/offscreencanvas": "^2019.6.4",
+    "@types/three": "^0.138.0",
     "chokidar": "^3.5.3",
     "vite": "^2.8.0",
     "vite-plugin-cross-origin-isolation": "^0.1.6",

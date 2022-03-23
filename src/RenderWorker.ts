@@ -17,6 +17,8 @@ import {
   Vector3,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { createResourceManager, processRemoteResourceMessages, registerResourceLoader, ResourceManager } from "./ResourceManager";
+import { createGLTFResourceLoader } from "./GLTFResourceLoader";
 
 const objects: Object3D[] = [];
 
@@ -28,11 +30,18 @@ if (typeof (window as any) === "undefined") {
   globalThis.addEventListener("message", onMainThreadMessage);
 }
 
-const state = {
+const state: {
+  needsResize: boolean,
+  canvasWidth: number,
+  canvasHeight: number,
+  scene?: Object3D;
+  resourceManager: ResourceManager
+} = {
   needsResize: true,
   canvasWidth: null,
   canvasHeight: null,
   scene: null,
+  resourceManager: null,
 };
 
 const addObject3DQueue = []
@@ -50,11 +59,14 @@ function onMainThreadMessage({ data: [type, ...args] }) {
       addObject3DQueue.push(eid)
       break;
     }
+    case "resourceCommands":
+      processRemoteResourceMessages(state.resourceManager, args[0]);
+      break;
   }
 }
 
 const addObject3D = (eid: number, obj: Object3D = new Mesh(boxGeometry, boxMaterial)) => {
-  obj.eid = eid;
+  (obj as Object3D & { eid: number}).eid = eid;
   objects.push(obj);
   state.scene.add(obj);
 }
@@ -96,6 +108,10 @@ export const init = async (
     state.canvasHeight = initCanvasHeight;
   
     const scene = state.scene = new Scene();
+
+    const resourceManager = createResourceManager();
+    registerResourceLoader(resourceManager, createGLTFResourceLoader(scene));
+    state.resourceManager = resourceManager;
   
     scene.add(new AmbientLight(0xffffff, 0.5));
   
@@ -148,10 +164,10 @@ export const init = async (
         //  - recompose and apply matrix to object3d
         for (let i = 0; i < objects.length; i++) {
           const obj = objects[i];
-          const { eid } = obj;
+          const { eid } = obj as Object3D & { eid: number };
           const position = Transform.position[eid];
           const rotation = Transform.rotation[eid];
-          quat.setFromEuler(euler.fromArray(rotation));
+          quat.setFromEuler(euler.fromArray(rotation as unknown as number[]));
           pos.fromArray(position);
           obj.position.lerp(pos, workerFrameRate / frameRate);
           obj.quaternion.slerp(quat, workerFrameRate / frameRate);
@@ -168,7 +184,7 @@ export const init = async (
       renderer.render(scene, camera);
     });
     
-    gameWorkerPort.postMessage(["start", workerFrameRate, tripleBuffer]);
+    gameWorkerPort.postMessage(["start", workerFrameRate, tripleBuffer, resourceManager.buffer]);
 
     console.log("RenderWorker initialized");
 }

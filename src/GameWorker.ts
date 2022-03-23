@@ -1,7 +1,8 @@
 import { addViewMatrix4, addViewVector3, addViewVector4 } from "./component/transform";
 import { addView, createCursorBuffer } from './allocator/CursorBuffer'
 import { maxEntities } from "./config";
-import { copyToWriteBuffer, swapWriteBuffer } from "./TripleBuffer";
+import { copyToWriteBuffer, swapWriteBuffer, TripleBufferState } from "./TripleBuffer";
+import { createRemoteResourceManager, loadRemoteGLTF, RemoteResourceManager } from "./ResourceManager";
 
 globalThis.addEventListener("message", onMessage);
 
@@ -27,12 +28,20 @@ const Transform = {
   nextSibling: addView(gameBuffer, Uint32Array, maxEntities),
 };
 
-const state = {
+const state: {
+  tripleBuffer: TripleBufferState,
+  frameRate: number,
+  renderWorkerPort: MessagePort,
+  then: number,
+  rotation: number[],
+  resourceManager: RemoteResourceManager,
+} = {
   tripleBuffer: null,
   frameRate: null,
   renderWorkerPort: null,
   then: 0,
   rotation: [0, 0, 0],
+  resourceManager: null,
 };
 
 function onMessage({ data: [type, ...args] }) {
@@ -41,7 +50,7 @@ function onMessage({ data: [type, ...args] }) {
       init(args[0]);
       break;
     case "start":
-      start(args[0], args[1]);
+      start(args[0], args[1], args[2]);
       break;
   }
 }
@@ -74,14 +83,17 @@ const createEntity = (eid: number) => {
   }
 }
 
-function start(frameRate, tripleBuffer) {
+function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManagerBuffer: SharedArrayBuffer) {
   console.log("GameWorker loop started");
   state.frameRate = frameRate;
   state.tripleBuffer = tripleBuffer;
+  state.resourceManager = createRemoteResourceManager(resourceManagerBuffer);
 
   for (let i = 0; i < maxEntities; i++) {
     createEntity(i);
   }
+
+  loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
 
   update();
 }
@@ -108,6 +120,16 @@ function update() {
 
   copyToWriteBuffer(state.tripleBuffer, renderableBuffer);
   swapWriteBuffer(state.tripleBuffer);
+
+  if (state.resourceManager.messageQueue.length > 0) {
+    state.renderWorkerPort.postMessage(
+      ["resourceCommands", state.resourceManager.messageQueue],
+      state.resourceManager.transferList
+    );
+
+    state.resourceManager.messageQueue = [];
+    state.resourceManager.transferList = [];
+  }
 
   const elapsed = performance.now() - state.then;
   const remainder = 1000 / state.frameRate - elapsed;
