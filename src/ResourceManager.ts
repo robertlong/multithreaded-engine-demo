@@ -122,10 +122,12 @@ export function processRemoteResourceMessages(
       case ResourceManagerCommand.AddRef: {
         const { resourceId } = message as AddResourceRefMessage;
         addResourceRef(manager, resourceId);
+        break;
       }
       case ResourceManagerCommand.RemoveRef: {
         const { resourceId } = message as RemoveResourceRefMessage;
         removeResourceRef(manager, resourceId);
+        break;
       }
     }
   }
