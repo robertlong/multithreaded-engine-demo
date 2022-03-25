@@ -17,6 +17,7 @@
     "ws": "^8.5.0"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.8.0-alpha.2",
     "bitecs": "^0.3.37",
     "three": "^0.138.3"
   }

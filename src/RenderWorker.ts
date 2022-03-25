@@ -202,7 +202,7 @@ export const init = async (
       //  - recompose and apply matrix to object3d
       for (let i = 0; i < objects.length; i++) {
         const obj = objects[i];
-        const { eid } = obj;
+        const { eid } = obj as Object3DEntity;
 
         const quat = quats[eid];
         const pos = poss[eid];
