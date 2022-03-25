@@ -1,5 +1,8 @@
 import GameWorker from "./GameWorker?worker&inline";
+import { InputArray } from "./input/InputKeys";
+import { bindInputState, createInputState } from "./input/InputManager";
 import "./live-reload";
+import { copyToWriteBuffer, createTripleBuffer, swapWriteBuffer } from "./TripleBuffer";
 
 async function main() {
   const canvas = document.getElementById("canvas");
@@ -7,6 +10,19 @@ async function main() {
   const gameWorker = new GameWorker();
   const useRenderWorker = (window as any).OffscreenCanvas;
   let renderWorker;
+
+  const inputState = createInputState(InputArray);
+  const inputTripleBuffer = createTripleBuffer(inputState.buffer.byteLength);
+
+  const inputUpdateLoop = () => {
+    requestAnimationFrame(inputUpdateLoop);
+    copyToWriteBuffer(inputTripleBuffer, inputState.buffer);
+    swapWriteBuffer(inputTripleBuffer);
+  };
+
+  bindInputState(inputState, canvas);
+
+  inputUpdateLoop();
 
   if (useRenderWorker) {
     console.info("Rendering in WebWorker");
@@ -18,7 +34,7 @@ async function main() {
     const renderWorkerPort = interWorkerChannel.port1;
     const gameWorkerPort = interWorkerChannel.port2;
 
-    gameWorker.postMessage(["init", renderWorkerPort], [renderWorkerPort]);
+    gameWorker.postMessage(["init", inputTripleBuffer, renderWorkerPort], [renderWorkerPort]);
 
     renderWorker.postMessage(
       [
@@ -43,15 +59,7 @@ async function main() {
   }
 
   window.addEventListener("resize", () => {
-    if (useRenderWorker) {
-      renderWorker.postMessage([
-        "resize",
-        canvas.clientWidth,
-        canvas.clientHeight,
-      ]);
-    } else {
-      renderWorker.resize(canvas.clientWidth, canvas.clientHeight);
-    }
+    renderWorker.postMessage(["resize", canvas.clientWidth, canvas.clientHeight]);
   });
 }
 
