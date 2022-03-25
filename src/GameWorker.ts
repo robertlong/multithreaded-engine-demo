@@ -4,11 +4,13 @@ import { maxEntities } from "./config";
 import { processResourceMessage, registerRemoteResourceLoader, RemoteResourceManager, createRemoteResourceManager } from "./RemoteResourceManager";
 import { IPostMessageTarget, ResourceState } from "./ResourceManager";
 import { GLTFRemoteResourceLoader, loadRemoteGLTF } from "./GLTFResourceLoader";
-import { loadRemoteMesh, MeshRemoteResourceLoader } from "./MeshResourceLoader";
+import { createRemoteMesh, MeshRemoteResourceLoader } from "./MeshResourceLoader";
 import { copyToWriteBuffer, getReadBufferIndex, swapReadBuffer, swapWriteBuffer, TripleBufferState } from "./TripleBuffer";
 import { createInputState, getInputButtonHeld, InputState } from "./input/InputManager";
 import { InputArray, Input } from "./input/InputKeys";
 import * as RAPIER from "@dimforge/rapier3d-compat";
+import { createRemoteUnlitMaterial, MaterialRemoteResourceLoader } from "./MaterialResourceLoader";
+import { createRemoteBoxGeometry, GeometryRemoteResourceLoader } from "./GeometryResourceLoader";
 
 const workerScope = globalThis as typeof globalThis & IPostMessageTarget;
 
@@ -107,7 +109,7 @@ const rndRange = (min, max) => {
   return Math.random() * (max - min) + min;
 }
 
-const createCube = (eid: number) => {
+const createCube = (eid: number, geometryResourceId: number) => {
   entities.push(eid);
 
   const position = Transform.position[eid];
@@ -121,7 +123,11 @@ const createCube = (eid: number) => {
   rotation[1] = rndRange(0,5);
   rotation[2] = rndRange(0,5);
 
-  const resourceId = loadRemoteMesh(state.resourceManager, Math.random() * 0xFFFFFF);
+  const materialResourceId = createRemoteUnlitMaterial(state.resourceManager, {
+    baseColorFactor: [Math.random(), Math.random(), Math.random(), 1.0]
+  });
+
+  const resourceId = createRemoteMesh(state.resourceManager, geometryResourceId, materialResourceId);
 
   const rigidBodyDesc = RAPIER.RigidBodyDesc.newDynamic()
           .setTranslation(position[0],position[1],position[2]);
@@ -161,14 +167,18 @@ function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManag
     createRemoteResourceManager(resourceManagerBuffer, state.renderWorkerPort || workerScope);
 
   registerRemoteResourceLoader(resourceManager, GLTFRemoteResourceLoader);
+  registerRemoteResourceLoader(resourceManager, GeometryRemoteResourceLoader);
+  registerRemoteResourceLoader(resourceManager, MaterialRemoteResourceLoader);
   registerRemoteResourceLoader(resourceManager, MeshRemoteResourceLoader);
 
   state.gltfResourceId = loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
   
   createCamera(0);
 
+  const geometryResourceId = createRemoteBoxGeometry(state.resourceManager);
+
   for (let i = 1; i < maxEntities; i++) {
-    createCube(i);
+    createCube(i, geometryResourceId);
   }
 
   update();

@@ -1,17 +1,29 @@
-import { BoxBufferGeometry, Mesh, MeshBasicMaterial, Scene } from "three";
+import { Mesh } from "three";
 import { RemoteResourceManager, loadRemoteResource, RemoteResourceLoader } from "./RemoteResourceManager";
 import { ResourceDefinition, ResourceLoader, ResourceLoaderResponse, ResourceManager } from "./ResourceManager";
 
+export interface MeshResourceDefinition extends ResourceDefinition {
+  geometryResourceId: number;
+  materialResourceId: number;
+}
 
-const boxGeometry = new BoxBufferGeometry();
-
-export function MeshResourceLoader(manager: ResourceManager): ResourceLoader<ResourceDefinition, Mesh> {  
+export function MeshResourceLoader(manager: ResourceManager): ResourceLoader<MeshResourceDefinition, Mesh> {  
   return {
     type: "mesh",
-    async load({ name, color }): Promise<ResourceLoaderResponse<Mesh>> {
+    async load({ name, geometryResourceId, materialResourceId }) {
+
+      const geometryResourceInfo = manager.store.get(geometryResourceId);
+      const materialResourceInfo = manager.store.get(materialResourceId);
+      
+      await Promise.all([geometryResourceInfo.promise, materialResourceInfo.promise]);
+
+      const mesh = new Mesh(geometryResourceInfo.resource, materialResourceInfo.resource);
+
+      mesh.name = name;
+
       return {
         name,
-        resource: new Mesh(boxGeometry, new MeshBasicMaterial({ wireframe: true, color })),
+        resource: mesh,
       };
     }
   };
@@ -23,14 +35,16 @@ export function MeshRemoteResourceLoader(manager: RemoteResourceManager): Remote
   };
 }
 
-export function loadRemoteMesh(
+export function createRemoteMesh(
   manager: RemoteResourceManager,
-  color: number,
+  geometryResourceId: number,
+  materialResourceId: number,
   name?: string,
 ): number {
   return loadRemoteResource(manager, {
     type: "mesh",
+    geometryResourceId,
+    materialResourceId,
     name,
-    color,
   });
 }

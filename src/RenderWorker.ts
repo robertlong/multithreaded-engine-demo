@@ -18,6 +18,8 @@ import {
 import { createResourceManager, processRemoteResourceMessage, registerResourceLoader, ResourceManager } from "./ResourceManager";
 import { GLTFResourceLoader } from "./GLTFResourceLoader";
 import { MeshResourceLoader } from "./MeshResourceLoader";
+import { MaterialResourceLoader } from "./MaterialResourceLoader";
+import { GeometryResourceLoader } from "./GeometryResourceLoader";
 
 const objects: Object3D[] = [];
 
@@ -136,6 +138,8 @@ export const init = async (
 
     const resourceManager = createResourceManager(gameWorkerPort);
     registerResourceLoader(resourceManager, GLTFResourceLoader);
+    registerResourceLoader(resourceManager, GeometryResourceLoader);
+    registerResourceLoader(resourceManager, MaterialResourceLoader);
     registerResourceLoader(resourceManager, MeshResourceLoader);
     state.resourceManager = resourceManager;
   

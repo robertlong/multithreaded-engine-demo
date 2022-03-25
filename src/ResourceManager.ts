@@ -132,21 +132,23 @@ async function loadResource<Def extends ResourceDefinition, Resource, RemoteReso
   resourceId: number,
   resourceDef: Def
 ): Promise<ResourceInfo<Resource, RemoteResource>> {
-  const { type, name } = resourceDef;
+  const { type } = resourceDef;
   const loader: ResourceLoader<Def, Resource, RemoteResource> = manager.resourceLoaders.get(type);
 
   if (!loader) {
     throw new Error(`Resource loader ${type} not registered.`);
   }
 
+  const name = resourceDef.name || `${type}[${resourceId}]`;
+
   const resourceInfo: ResourceInfo<Resource, RemoteResource> = {
     resourceId,
     type,
-    name: name || `${type}[${resourceId}]`,
+    name,
     refCount: 1,
     state: ResourceState.Loading,
     resource: undefined,
-    promise: loader.load(resourceDef),
+    promise: loader.load({ ...resourceDef, name }),
   };
 
   manager.store.set(resourceId, resourceInfo);
