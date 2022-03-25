@@ -23,7 +23,7 @@ import { createGLTFResourceLoader } from "./GLTFResourceLoader";
 
 const objects: Object3D[] = [];
 
-const boxMaterial = new MeshBasicMaterial({ wireframe: true });
+const boxMaterial = new MeshBasicMaterial({ color: 0xffffffff });
 const boxGeometry = new BoxBufferGeometry();
 
 if (typeof (window as any) === "undefined") {
@@ -73,8 +73,10 @@ function onMainThreadMessage({ data: [type, ...args] }) {
   }
 }
 
+type Object3DEntity = (Object3D | Mesh | Camera) & { eid: number}
+
 const addObject3D = (eid: number, obj: Object3D = new Mesh(boxGeometry, boxMaterial)) => {
-  (obj as Object3D & { eid: number}).eid = eid;
+  (obj as Object3DEntity).eid = eid;
   objects.push(obj);
   state.scene.add(obj);
 }
@@ -85,7 +87,7 @@ const addCamera = (eid: number, obj: Camera = new PerspectiveCamera(
   0.1,
   1000
 )) => {
-  obj.eid = eid;
+  (obj as Object3DEntity).eid = eid;
   objects.push(obj);
   cameras.push(obj);
   state.scene.add(obj);
@@ -142,11 +144,6 @@ export const init = async (
     // const box = new Mesh(boxGeometry, boxMaterial);
     // scene.add(box);
   
-    const gltfLoader = new GLTFLoader();
-  
-    const { scene: box } = await gltfLoader.loadAsync("/OutdoorFestival.glb");
-    scene.add(box);
-  
     const renderer = new WebGLRenderer({ antialias: true, canvas });
   
     // const euler = new Euler();
@@ -185,10 +182,12 @@ export const init = async (
           const { eid } = obj as Object3D & { eid: number };
           const position = Transform.position[eid];
           const rotation = Transform.rotation[eid];
+          const quaternion = Transform.quaternion[eid];
           const euler = eulers[eid];
           const quat = quats[eid];
           const pos = poss[eid];
-          quat.setFromEuler(euler.fromArray(rotation as unknown as number[]));
+          // quat.setFromEuler(euler.fromArray(rotation as unknown as number[]));
+          quat.fromArray(quaternion);
           pos.fromArray(position);
         }
 

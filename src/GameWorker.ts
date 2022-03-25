@@ -3,15 +3,17 @@ import { addView, createCursorBuffer } from './allocator/CursorBuffer'
 import { maxEntities } from "./config";
 import { copyToWriteBuffer, getReadBufferIndex, swapReadBuffer, swapWriteBuffer, TripleBufferState } from "./TripleBuffer";
 import { createRemoteResourceManager, loadRemoteGLTF, RemoteResourceManager } from "./ResourceManager";
-import { createInputState, getInputButtonDown, getInputButtonHeld, InputState } from "./input/InputManager";
+import { createInputState, getInputButtonHeld, InputState } from "./input/InputManager";
 import { InputArray, Input } from "./input/InputKeys";
+import * as RAPIER from '@dimforge/rapier3d-compat';
 
 globalThis.addEventListener("message", onMessage);
 
 const gameBuffer = createCursorBuffer();
 const renderableBuffer = createCursorBuffer();
 
-const entities = [];
+const entities: number[] = [];
+const rigidBodies: RAPIER.RigidBody[] = [];
 
 const Transform = {
   position: addViewVector3(renderableBuffer, maxEntities),
@@ -34,6 +36,7 @@ const state: {
   tripleBuffer: TripleBufferState,
   inputTripleBuffer: TripleBufferState,
   inputStates: InputState[],
+  physicsWorld: RAPIER.World,
   frameRate: number,
   renderWorkerPort: MessagePort,
   then: number,
@@ -43,6 +46,7 @@ const state: {
   tripleBuffer: null,
   inputTripleBuffer: null,
   inputStates: null,
+  physicsWorld: null,
   frameRate: null,
   renderWorkerPort: null,
   then: 0,
@@ -50,10 +54,10 @@ const state: {
   resourceManager: null,
 };
 
-function onMessage({ data: [type, ...args] }) {
+async function onMessage({ data: [type, ...args] }) {
   switch (type) {
     case "init":
-      init(args[0], args[1]);
+      await init(args[0], args[1]);
       break;
     case "start":
       start(args[0], args[1], args[2]);
@@ -61,8 +65,17 @@ function onMessage({ data: [type, ...args] }) {
   }
 }
 
-function init(inputTripleBuffer, renderWorkerPort) {
+async function init(inputTripleBuffer, renderWorkerPort) {
   console.log("GameWorker initialized");
+
+  await RAPIER.init();
+
+  const gravity = new RAPIER.Vector3(0.0, -9.81, 0.0);
+  state.physicsWorld = new RAPIER.World(gravity);
+    
+  // Create the ground
+  let groundColliderDesc = RAPIER.ColliderDesc.cuboid(100.0, 0.1, 100.0);
+  state.physicsWorld.createCollider(groundColliderDesc);
 
   state.inputTripleBuffer = inputTripleBuffer;
   state.inputStates = inputTripleBuffer.buffers
@@ -87,12 +100,21 @@ const createEntity = (eid: number) => {
   const rotation = Transform.rotation[eid];
 
   position[0] = rndRange(-20, 20);
-  position[1] = rndRange(-20, 20);
+  position[1] = rndRange(5, 50);
   position[2] = rndRange(-20, 20);
 
   rotation[0] = rndRange(0,5);
   rotation[1] = rndRange(0,5);
   rotation[2] = rndRange(0,5);
+
+  const rigidBodyDesc = RAPIER.RigidBodyDesc.newDynamic()
+          .setTranslation(position[0],position[1],position[2]);
+  const rigidBody = state.physicsWorld.createRigidBody(rigidBodyDesc);
+
+  const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
+  const collider = state.physicsWorld.createCollider(colliderDesc, rigidBody.handle)
+
+  rigidBodies.push(rigidBody);
 
   const port = state.renderWorkerPort || globalThis;
   port.postMessage(['addEntity', eid])
@@ -127,20 +149,45 @@ function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManag
   update();
 }
 
-const inputSystem = (dt) => {
+const cameraMoveSystem = (dt) => {
   const eid = 0;
   const position = Transform.position[eid];
   swapReadBuffer(state.inputTripleBuffer)
   const readableIndex = getReadBufferIndex(state.inputTripleBuffer);
   const inputState = state.inputStates[readableIndex];
-  if (getInputButtonHeld(inputState, Input.KeyW))
+  if (getInputButtonHeld(inputState, Input.ArrowUp))
     position[2] -= dt * 25;
-  if (getInputButtonHeld(inputState, Input.KeyS))
+  if (getInputButtonHeld(inputState, Input.ArrowDown))
     position[2] += dt * 25;
-  if (getInputButtonHeld(inputState, Input.KeyA))
+  if (getInputButtonHeld(inputState, Input.ArrowLeft))
     position[0] -= dt * 25;
-  if (getInputButtonHeld(inputState, Input.KeyD))
+  if (getInputButtonHeld(inputState, Input.ArrowRight))
     position[0] += dt * 25;
+}
+
+const speed = 0.5;
+const forward = new RAPIER.Vector3(0,0,-speed);
+const backward = new RAPIER.Vector3(0,0,speed);
+const right = new RAPIER.Vector3(speed,0,0);
+const left = new RAPIER.Vector3(-speed,0,0);
+const up = new RAPIER.Vector3(0,speed,0);
+const cubeMoveSystem = (dt) => {
+  const eid = 1;
+  const rigidBody = rigidBodies[eid];
+  const position = Transform.position[eid];
+  swapReadBuffer(state.inputTripleBuffer)
+  const readableIndex = getReadBufferIndex(state.inputTripleBuffer);
+  const inputState = state.inputStates[readableIndex];
+  if (getInputButtonHeld(inputState, Input.KeyW))
+    rigidBody.applyImpulse(forward, true);
+  if (getInputButtonHeld(inputState, Input.KeyS))
+    rigidBody.applyImpulse(backward, true);
+  if (getInputButtonHeld(inputState, Input.KeyA))
+    rigidBody.applyImpulse(left, true);
+  if (getInputButtonHeld(inputState, Input.KeyD))
+    rigidBody.applyImpulse(right, true);
+  if (getInputButtonHeld(inputState, Input.Space))
+    rigidBody.applyImpulse(up, true);
 }
 
 const rotationSystem = (dt) => {
@@ -153,9 +200,35 @@ const rotationSystem = (dt) => {
   }
 }
 
+const physicsSystem = (dt) => {
+
+  for (let i = 1; i < rigidBodies.length; i++) {
+    const eid = entities[i];
+    const body = rigidBodies[i];
+    const rigidPos = body.translation();
+    const rigidRot = body.rotation();
+    const position = Transform.position[eid];
+    const quaternion = Transform.quaternion[eid];
+
+    position[0] = rigidPos.x;
+    position[1] = rigidPos.y;
+    position[2] = rigidPos.z;
+
+    quaternion[0] = rigidRot.x;
+    quaternion[1] = rigidRot.y;
+    quaternion[2] = rigidRot.z;
+    quaternion[3] = rigidRot.w;
+  }
+
+  state.physicsWorld.timestep = dt;
+  state.physicsWorld.step()
+}
+
 const pipeline = (dt) => {
-  inputSystem(dt);
-  rotationSystem(dt);
+  cameraMoveSystem(dt);
+  // rotationSystem(dt);
+  cubeMoveSystem(dt);
+  physicsSystem(dt);
 }
 
 function update() {
