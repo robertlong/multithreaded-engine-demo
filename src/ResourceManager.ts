@@ -1,19 +1,46 @@
-import { TypedArray } from "bitecs";
+import { RemoteResourceMessage } from "./RemoteResourceManager";
 
-export type ResourceLoaderFactory<D extends ResourceDefinition, T> = (manager: ResourceManager) => ResourceLoader<D, T>;
-
-export interface ResourceLoader<D extends ResourceDefinition, T> {
-  type: string;
-  load(resourceDef: D): Promise<T>;
-  dispose(resourceInfo: ResourceInfo<T>): void;
+export interface IPostMessageTarget {
+  postMessage(message: any): void;
+  postMessage(message: any, transfer: Transferable[]): void;
 }
 
 export interface ResourceManager {
   buffer: SharedArrayBuffer;
   view: Uint32Array;
-  store: Map<number, ResourceInfo<any>>;
-  urlToResourceId: Map<string, number>;
-  resourceLoaders: Map<string, ResourceLoader<any, any>>;
+  store: Map<number, ResourceInfo<any, any>>;
+  resourceLoaders: Map<string, ResourceLoader<any, any, any>>;
+  postMessageTarget: IPostMessageTarget;
+}
+
+export type ResourceLoaderFactory<Def extends ResourceDefinition, Resource, RemoteResource = undefined> = (
+  manager: ResourceManager
+) => ResourceLoader<Def, Resource, RemoteResource>;
+
+export interface ResourceLoader<Def extends ResourceDefinition, Resource, RemoteResource = undefined> {
+  type: string;
+  load(resourceDef: Def): Promise<ResourceLoaderResponse<Resource, RemoteResource>>;
+  addRef?(resourceId: number);
+  removeRef?(resourceId: number);
+  dispose?(resourceId: number): void;
+}
+
+export interface ResourceLoaderResponse<Resource, RemoteResource = undefined> {
+  name?: string;
+  resource: Resource;
+  remoteResource?: RemoteResource;
+  transferList?: Transferable[];
+}
+
+export interface ResourceInfo<Resource, RemoteResource = undefined> {
+  resourceId: number;
+  type: string;
+  name: string;
+  refCount: number;
+  state: ResourceState;
+  resource?: Resource;
+  promise: Promise<ResourceLoaderResponse<Resource, RemoteResource>>
+  error?: Error;
 }
 
 export enum ResourceState {
@@ -22,143 +49,101 @@ export enum ResourceState {
   Error = "error",
 }
 
-export interface ResourceInfo<Resource> {
-  resourceId: number;
-  type: string;
-  name: string;
-  count: number;
-  state: ResourceState;
-  url?: string;
-  resource?: Resource;
-  promise: Promise<Resource>;
-  error?: Error;
+export interface IResourceMessage {
+  command: ResourceManagerCommand;
 }
 
-export interface RemoteResourceInfo {
-  resourceId: number;
-  type: string;
-  url?: string;
-  count: number;
-  state: ResourceState;
-}
+export type ResourceMessage =
+  | LoadedResourceMessage<any>
+  | LoadErrorResourceMessage<any>
+  | DisposedResourceMessage;
 
 export enum ResourceManagerCommand {
   Load = "load",
+  Loaded = "loaded",
+  LoadError = "load-error",
   AddRef = "add-ref",
   RemoveRef = "remove-ref",
+  Disposed = "disposed",
 }
 
-export interface RemoteResourceMessage {
-  command: ResourceManagerCommand;
+export interface LoadedResourceMessage<RemoteResource = undefined> extends IResourceMessage {
+  command: ResourceManagerCommand.Loaded;
+  resourceId: number;
+  remoteResource?: RemoteResource;
+}
+
+export interface LoadErrorResourceMessage<Error> extends IResourceMessage {
+  command: ResourceManagerCommand.LoadError;
+  resourceId: number;
+  error: Error;
+}
+
+export interface DisposedResourceMessage extends IResourceMessage {
+  command: ResourceManagerCommand.Disposed;
+  resourceId: number;
 }
 
 export interface ResourceDefinition {
   type: string;
   name?: string;
-  url?: string;
   [key: string]: any;
 }
 
-export interface LoadResourceMessage extends RemoteResourceMessage {
-  command: ResourceManagerCommand.Load;
-  resourceId: number;
-  resourceDef: ResourceDefinition;
-}
-
-export interface AddResourceRefMessage extends RemoteResourceMessage {
-  command: ResourceManagerCommand.AddRef;
-  resourceId: number;
-}
-
-export interface RemoveResourceRefMessage extends RemoteResourceMessage {
-  command: ResourceManagerCommand.RemoveRef;
-  resourceId: number;
-}
-
-export interface RemoteResourceManager {
-  buffer: SharedArrayBuffer;
-  view: Uint32Array;
-  messageQueue: RemoteResourceMessage[];
-  transferList: Transferable[];
-  store: Map<number, RemoteResourceInfo>;
-  urlToResourceId: Map<string, number>;
-}
-
-const RESOURCE_ID_INDEX = 0;
-
-export function createResourceManager(): ResourceManager {
+export function createResourceManager(postMessageTarget: IPostMessageTarget): ResourceManager {
   const buffer = new SharedArrayBuffer(4);
 
   return {
     buffer,
     view: new Uint32Array(buffer),
     store: new Map(),
-    urlToResourceId: new Map(),
     resourceLoaders: new Map(),
+    postMessageTarget,
   };
 }
 
 export function registerResourceLoader(
   manager: ResourceManager,
-  loaderFactory: ResourceLoaderFactory<any, any>
+  loaderFactory: ResourceLoaderFactory<any, any, any>
 ): void {
   const loader = loaderFactory(manager);
   manager.resourceLoaders.set(loader.type, loader);
 }
 
-export function processRemoteResourceMessages(
+export function processRemoteResourceMessage(
   manager: ResourceManager,
-  messages: RemoteResourceMessage[]
+  message: RemoteResourceMessage
 ) {
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-
-    switch (message.command) {
-      case ResourceManagerCommand.Load: {
-        const { resourceId, resourceDef } = message as LoadResourceMessage;
-        loadResource(manager, resourceId, resourceDef);
-        break;
-      }
-      case ResourceManagerCommand.AddRef: {
-        const { resourceId } = message as AddResourceRefMessage;
-        addResourceRef(manager, resourceId);
-        break;
-      }
-      case ResourceManagerCommand.RemoveRef: {
-        const { resourceId } = message as RemoveResourceRefMessage;
-        removeResourceRef(manager, resourceId);
-        break;
-      }
-    }
+  switch (message.command) {
+    case ResourceManagerCommand.Load:
+      loadResource(manager, message.resourceId, message.resourceDef);
+      break;
+    case ResourceManagerCommand.AddRef:
+      addResourceRef(manager, message.resourceId);
+      break;
+    case ResourceManagerCommand.RemoveRef:
+      removeResourceRef(manager, message.resourceId);
+      break;
   }
 }
 
-export function createResource<T>(
-  manager: ResourceManager,
-  resourceDef: ResourceDefinition
-): Promise<ResourceInfo<T>> {
-  const resourceId = Atomics.add(manager.view, RESOURCE_ID_INDEX, 1);
-  return loadResource(manager, resourceId, resourceDef);
-}
-
-export async function loadResource<D extends ResourceDefinition, T>(
+async function loadResource<Def extends ResourceDefinition, Resource, RemoteResource = undefined>(
   manager: ResourceManager,
   resourceId: number,
-  resourceDef: D
-): Promise<ResourceInfo<T>> {
-  const type = resourceDef.type;
-  const loader: ResourceLoader<D, T> = manager.resourceLoaders.get(type);
+  resourceDef: Def
+): Promise<ResourceInfo<Resource, RemoteResource>> {
+  const { type, name } = resourceDef;
+  const loader: ResourceLoader<Def, Resource, RemoteResource> = manager.resourceLoaders.get(type);
 
   if (!loader) {
     throw new Error(`Resource loader ${type} not registered.`);
   }
 
-  const resourceInfo: ResourceInfo<T> = {
+  const resourceInfo: ResourceInfo<Resource, RemoteResource> = {
     resourceId,
     type,
-    name: resourceDef.name,
-    url: resourceDef.url,
-    count: 1,
+    name: name || `${type}[${resourceId}]`,
+    refCount: 1,
     state: ResourceState.Loading,
     resource: undefined,
     promise: loader.load(resourceDef),
@@ -166,176 +151,76 @@ export async function loadResource<D extends ResourceDefinition, T>(
 
   manager.store.set(resourceId, resourceInfo);
 
-  if (resourceDef.url) {
-    manager.urlToResourceId.set(resourceDef.url, resourceId);
-  }
-
   try {
-    resourceInfo.resource = await resourceInfo.promise;
+    const response = await resourceInfo.promise;
+
+    if (!resourceDef.name && response.name) {
+      resourceInfo.name = response.name;
+    }
+
+    resourceInfo.resource = response.resource;
     resourceInfo.state = ResourceState.Loaded;
+
+    manager.postMessageTarget.postMessage({
+      command: ResourceManagerCommand.Loaded,
+      resourceId,
+      remoteResource: response.remoteResource,
+    } as LoadedResourceMessage<RemoteResource>, response.transferList);
   } catch (error) {
+    console.error(error);
     resourceInfo.state = ResourceState.Error;
     resourceInfo.error = error;
+    manager.postMessageTarget.postMessage({
+      command: ResourceManagerCommand.LoadError,
+      resourceId,
+      error,
+    } as LoadErrorResourceMessage<typeof error>);
   }
 
   return resourceInfo;
 }
 
-export function addResourceRef(manager: ResourceManager, resourceId: number) {
+function addResourceRef(manager: ResourceManager, resourceId: number) {
   const resourceInfo = manager.store.get(resourceId);
 
   if (!resourceInfo) {
     return;
   }
 
-  resourceInfo.count++;
+  const loader = manager.resourceLoaders.get(resourceInfo.type);
+
+  if (loader.addRef) {
+    loader.addRef(resourceId);
+  }
+
+  resourceInfo.refCount++;
 }
 
-export function removeResourceRef(manager: ResourceManager, resourceId: number) {
+function removeResourceRef(manager: ResourceManager, resourceId: number) {
   const resourceInfo = manager.store.get(resourceId);
 
   if (!resourceInfo) {
     return;
   }
 
-  if (resourceInfo.count === 1) {
-    if (resourceInfo.url) {
-      manager.urlToResourceId.delete(resourceInfo.url);
+  const loader = manager.resourceLoaders.get(resourceInfo.type);
+
+  if (resourceInfo.refCount === 1) {
+    if (loader.dispose) {
+      loader.dispose(resourceId);
     }
 
     manager.store.delete(resourceId);
-    manager.resourceLoaders.get(resourceInfo.type).dispose(resourceInfo);
+    
+    manager.postMessageTarget.postMessage({
+      command: ResourceManagerCommand.Disposed,
+      resourceId,
+    } as ResourceMessage);
   } else {
-    resourceInfo.count--;
-  }
-}
-
-export function createRemoteResourceManager(buffer: SharedArrayBuffer): RemoteResourceManager {
-  return {
-    buffer,
-    view: new Uint32Array(buffer),
-    messageQueue: [],
-    transferList: [],
-    store: new Map(),
-    urlToResourceId: new Map(),
-  };
-}
-
-export function loadRemoteResource(
-  manager: RemoteResourceManager,
-  resourceDef: ResourceDefinition,
-  transferList?: Transferable[]
-): number {
-  const resourceId = Atomics.add(manager.view, RESOURCE_ID_INDEX, 1);
-
-  manager.store.set(resourceId, {
-    resourceId,
-    type: resourceDef.type,
-    count: 1,
-    state: ResourceState.Loading,
-    url: resourceDef.url,
-  });
-
-  if (resourceDef.url) {
-    manager.urlToResourceId.set(resourceDef.url, resourceId);
-  }
-
-  manager.messageQueue.push({
-    command: ResourceManagerCommand.Load,
-    resourceId,
-    resourceDef,
-  } as RemoteResourceMessage);
-
-  if (transferList) {
-    manager.transferList.push(...transferList);
-  }
-
-  return resourceId;
-}
-
-export function addRemoteResourceRef(
-  manager: RemoteResourceManager,
-  resourceId: number
-) {
-  const resourceInfo = manager.store.get(resourceId);
-  resourceInfo.count++;
-  manager.messageQueue.push({
-    command: ResourceManagerCommand.AddRef,
-    resourceId,
-  } as RemoteResourceMessage);
-}
-
-export function removeRemoteResourceRef(
-  manager: RemoteResourceManager,
-  resourceId: number
-) {
-  manager.messageQueue.push({
-    command: ResourceManagerCommand.RemoveRef,
-    resourceId,
-  } as RemoteResourceMessage);
-
-  const resourceInfo = manager.store.get(resourceId);
-
-  if (resourceInfo.count === 1) {
-    if (resourceInfo.url) {
-      manager.urlToResourceId.delete(resourceInfo.url);
+    if (loader.removeRef) {
+      loader.removeRef(resourceId);
     }
 
-    manager.store.delete(resourceId);
-  } else {
-    resourceInfo.count--;
+    resourceInfo.refCount--;
   }
-}
-
-export function getRemoteResource(
-  manager: RemoteResourceManager,
-  resourceId: number
-): RemoteResourceInfo | undefined {
-  return manager.store.get(resourceId);
-}
-
-export function getRemoteResourceByUrl(
-  manager: RemoteResourceManager,
-  url: string
-): RemoteResourceInfo | undefined {
-  const resourceId = manager.urlToResourceId.get(url);
-
-  if (resourceId === undefined) {
-    return undefined;
-  }
-
-  return manager.store.get(resourceId);
-}
-
-/**
- * Examples:
- */
-
-export function loadRemoteGLTF(
-  manager: RemoteResourceManager,
-  url: string
-): number {
-  const remoteResource = getRemoteResourceByUrl(manager, url);
-
-  if (remoteResource) {
-    addRemoteResourceRef(manager, remoteResource.resourceId);
-    return remoteResource.resourceId;
-  }
-
-  return loadRemoteResource(manager, {
-    type: "gltf",
-    url,
-  });
-}
-
-export function loadRemoteGeometry(
-  manager: RemoteResourceManager,
-  indices: Uint32Array,
-  attributes: { [name: string]: TypedArray }
-): number {
-  return loadRemoteResource(manager, {
-    type: "geometry",
-    indices,
-    attributes,
-  });
 }

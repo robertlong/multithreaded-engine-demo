@@ -6,10 +6,7 @@ import {
   AmbientLight,
   WebGLRenderer,
   Scene,
-  Mesh,
   Object3D,
-  MeshBasicMaterial,
-  BoxBufferGeometry,
   PerspectiveCamera,
   Quaternion,
   Euler,
@@ -17,13 +14,11 @@ import {
   Vector3,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
-import { createResourceManager, processRemoteResourceMessages, registerResourceLoader, ResourceManager } from "./ResourceManager";
-import { createGLTFResourceLoader } from "./GLTFResourceLoader";
+import { createResourceManager, processRemoteResourceMessage, registerResourceLoader, ResourceManager } from "./ResourceManager";
+import { GLTFResourceLoader } from "./GLTFResourceLoader";
+import { MeshResourceLoader } from "./MeshResourceLoader";
 
 const objects: Object3D[] = [];
-
-const boxMaterial = new MeshBasicMaterial({ wireframe: true });
-const boxGeometry = new BoxBufferGeometry();
 
 if (typeof (window as any) === "undefined") {
   self.window = self;
@@ -46,7 +41,14 @@ const state: {
 
 const addObject3DQueue = []
 
-function onMainThreadMessage({ data: [type, ...args] }) {
+function onMainThreadMessage({ data }) {
+  if (!Array.isArray(data)) {
+    processRemoteResourceMessage(state.resourceManager, data);
+    return;
+  }
+
+  const [type, ...args] = data;
+
   switch (type) {
     case "init":
       init(args[0], args[1], args[2], args[3]);
@@ -56,16 +58,15 @@ function onMainThreadMessage({ data: [type, ...args] }) {
       break;
     case "addEntity": {
       const eid = args[0];
-      addObject3DQueue.push(eid)
+      const resourceId = args[1];
+      addObject3DQueue.push([eid, resourceId])
       break;
     }
-    case "resourceCommands":
-      processRemoteResourceMessages(state.resourceManager, args[0]);
-      break;
   }
 }
 
-const addObject3D = (eid: number, obj: Object3D = new Mesh(boxGeometry, boxMaterial)) => {
+const addObject3D = (eid: number, resourceId: number) => {
+  const obj = state.resourceManager.store.get(resourceId).resource as Object3D;
   (obj as Object3D & { eid: number}).eid = eid;
   objects.push(obj);
   state.scene.add(obj);
@@ -109,8 +110,9 @@ export const init = async (
   
     const scene = state.scene = new Scene();
 
-    const resourceManager = createResourceManager();
-    registerResourceLoader(resourceManager, createGLTFResourceLoader(scene));
+    const resourceManager = createResourceManager(gameWorkerPort);
+    registerResourceLoader(resourceManager, GLTFResourceLoader);
+    registerResourceLoader(resourceManager, MeshResourceLoader);
     state.resourceManager = resourceManager;
   
     scene.add(new AmbientLight(0xffffff, 0.5));
@@ -151,7 +153,8 @@ export const init = async (
       const frameRate = 1 / dt;
 
       while (addObject3DQueue.length) {
-        addObject3D(addObject3DQueue.shift())
+        const [eid, resourceId] = addObject3DQueue.shift();
+        addObject3D(eid, resourceId);
       }
   
       if (swapReadBuffer(tripleBuffer)) {

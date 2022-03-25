@@ -2,9 +2,14 @@ import { addViewMatrix4, addViewVector3, addViewVector4 } from "./component/tran
 import { addView, createCursorBuffer } from './allocator/CursorBuffer'
 import { maxEntities } from "./config";
 import { copyToWriteBuffer, swapWriteBuffer, TripleBufferState } from "./TripleBuffer";
-import { createRemoteResourceManager, loadRemoteGLTF, RemoteResourceManager } from "./ResourceManager";
+import { createRemoteResourceManager, processResourceMessage, registerRemoteResourceLoader, RemoteResourceManager } from "./RemoteResourceManager";
+import { IPostMessageTarget, ResourceState } from "./ResourceManager";
+import { GLTFRemoteResourceLoader, loadRemoteGLTF } from "./GLTFResourceLoader";
+import { loadRemoteMesh, MeshRemoteResourceLoader } from "./MeshResourceLoader";
 
-globalThis.addEventListener("message", onMessage);
+const workerScope = globalThis as typeof globalThis & IPostMessageTarget;
+
+workerScope.addEventListener("message", onMessage);
 
 const gameBuffer = createCursorBuffer();
 const renderableBuffer = createCursorBuffer();
@@ -35,6 +40,7 @@ const state: {
   then: number,
   rotation: number[],
   resourceManager: RemoteResourceManager,
+  gltfResourceId: number;
 } = {
   tripleBuffer: null,
   frameRate: null,
@@ -42,9 +48,17 @@ const state: {
   then: 0,
   rotation: [0, 0, 0],
   resourceManager: null,
+  gltfResourceId: undefined,
 };
 
-function onMessage({ data: [type, ...args] }) {
+function onMessage({ data }) {
+  if (!Array.isArray(data)) {
+    processResourceMessage(state.resourceManager, data);
+    return;
+  }
+
+  const [type, ...args] = data;
+
   switch (type) {
     case "init":
       init(args[0]);
@@ -69,31 +83,42 @@ const rndRange = (min, max) => {
   return Math.random() * (max - min) + min;
 }
 
-const createEntity = (eid: number) => {
+const createCube = (eid: number) => {
   entities.push(eid);
   const position = Transform.position[eid];
   position[0] = rndRange(-20, 20);
   position[1] = rndRange(-20, 20);
   position[2] = rndRange(-20, 20);
 
-  if (state.renderWorkerPort) {
-    state.renderWorkerPort.postMessage(['addEntity', eid]);
-  } else {
-    globalThis.postMessage(['addEntity', eid])
-  }
+  const resourceId = loadRemoteMesh(state.resourceManager, Math.random() * 0xFFFFFF);
+
+  createEntity(eid, resourceId);
 }
+
+const createEntity = (eid, resourceId) => {
+  if (state.renderWorkerPort) {
+    state.renderWorkerPort.postMessage(['addEntity', eid, resourceId]);
+  } else {
+    workerScope.postMessage(['addEntity', eid, resourceId])
+  }
+};
 
 function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManagerBuffer: SharedArrayBuffer) {
   console.log("GameWorker loop started");
   state.frameRate = frameRate;
   state.tripleBuffer = tripleBuffer;
-  state.resourceManager = createRemoteResourceManager(resourceManagerBuffer);
+  const resourceManager = state.resourceManager =
+    createRemoteResourceManager(resourceManagerBuffer, state.renderWorkerPort || workerScope);
 
-  for (let i = 0; i < maxEntities; i++) {
-    createEntity(i);
+  registerRemoteResourceLoader(resourceManager, GLTFRemoteResourceLoader);
+  registerRemoteResourceLoader(resourceManager, MeshRemoteResourceLoader);
+
+  state.gltfResourceId = loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
+  
+
+  for (let i = 1; i < maxEntities; i++) {
+    createCube(i);
   }
-
-  loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
 
   update();
 }
@@ -107,7 +132,22 @@ const rotationSystem = (dt) => {
   }
 }
 
+let createdScene = false;
+
+function gltfLoaderSystem() {
+  if (createdScene) {
+    return;
+  }
+
+  const resource = state.resourceManager.store.get(state.gltfResourceId);
+
+  if (resource && resource.state === ResourceState.Loaded) {
+    createEntity(0, resource.resourceId);
+  }
+}
+
 const pipeline = (dt) => {
+  gltfLoaderSystem();
   rotationSystem(dt);
 }
 
@@ -120,16 +160,6 @@ function update() {
 
   copyToWriteBuffer(state.tripleBuffer, renderableBuffer);
   swapWriteBuffer(state.tripleBuffer);
-
-  if (state.resourceManager.messageQueue.length > 0) {
-    state.renderWorkerPort.postMessage(
-      ["resourceCommands", state.resourceManager.messageQueue],
-      state.resourceManager.transferList
-    );
-
-    state.resourceManager.messageQueue = [];
-    state.resourceManager.transferList = [];
-  }
 
   const elapsed = performance.now() - state.then;
   const remainder = 1000 / state.frameRate - elapsed;
