@@ -3,6 +3,7 @@ import {
   Material,
   Color,
   MeshBasicMaterialParameters,
+  FrontSide,
   DoubleSide,
 } from "three";
 import {
@@ -11,6 +12,7 @@ import {
   RemoteResourceLoader,
 } from "./RemoteResourceManager";
 import {
+  asyncLoadResource,
   ResourceDefinition,
   ResourceLoader,
   ResourceManager,
@@ -61,20 +63,12 @@ export function MaterialResourceLoader(
       switch (def.materialType) {
         case MaterialResourceType.Unlit:
           const meshBasicMaterialParams: MeshBasicMaterialParameters = {
-            color: new Color(1.0, 1.0, 1.0),
-            opacity: 1.0,
+            color: def.baseColorFactor
+              ? new Color().fromArray(def.baseColorFactor)
+              : 0xffffff,
+            opacity: def.baseColorFactor ? def.baseColorFactor[3] : 1.0,
+            side: def.doubleSided === true ? DoubleSide : FrontSide,
           };
-
-          if (def.baseColorFactor) {
-            (meshBasicMaterialParams.color as Color).fromArray(
-              def.baseColorFactor
-            );
-            meshBasicMaterialParams.opacity = def.baseColorFactor[3];
-          }
-
-          if (def.doubleSided === true) {
-            meshBasicMaterialParams.side = DoubleSide;
-          }
 
           const alphaMode = def.alphaMode || MaterialAlphaMode.OPAQUE;
 
@@ -86,21 +80,15 @@ export function MaterialResourceLoader(
 
             if (alphaMode === MaterialAlphaMode.MASK) {
               meshBasicMaterialParams.alphaTest =
-                def.alphaCutoff !== undefined
-                  ? def.alphaCutoff
-                  : 0.5;
+                def.alphaCutoff !== undefined ? def.alphaCutoff : 0.5;
             }
           }
 
           if (def.baseColorMapResourceId !== undefined) {
-            const mapResourceInfo = manager.store.get(
+            meshBasicMaterialParams.map = await asyncLoadResource(
+              manager,
               def.baseColorMapResourceId
             );
-
-            if (mapResourceInfo) {
-              const { resource } = await mapResourceInfo.promise;
-              meshBasicMaterialParams.map = resource;
-            }
           }
 
           material = new MeshBasicMaterial(meshBasicMaterialParams);

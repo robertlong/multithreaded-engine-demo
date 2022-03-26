@@ -13,13 +13,21 @@ export interface ResourceManager {
   postMessageTarget: IPostMessageTarget;
 }
 
-export type ResourceLoaderFactory<Def extends ResourceDefinition, Resource, RemoteResource = undefined> = (
-  manager: ResourceManager
-) => ResourceLoader<Def, Resource, RemoteResource>;
+export type ResourceLoaderFactory<
+  Def extends ResourceDefinition,
+  Resource,
+  RemoteResource = undefined
+> = (manager: ResourceManager) => ResourceLoader<Def, Resource, RemoteResource>;
 
-export interface ResourceLoader<Def extends ResourceDefinition, Resource, RemoteResource = undefined> {
+export interface ResourceLoader<
+  Def extends ResourceDefinition,
+  Resource,
+  RemoteResource = undefined
+> {
   type: string;
-  load(resourceDef: Def): Promise<ResourceLoaderResponse<Resource, RemoteResource>>;
+  load(
+    resourceDef: Def
+  ): Promise<ResourceLoaderResponse<Resource, RemoteResource>>;
   addRef?(resourceId: number);
   removeRef?(resourceId: number);
   dispose?(resourceId: number): void;
@@ -39,7 +47,7 @@ export interface ResourceInfo<Resource, RemoteResource = undefined> {
   refCount: number;
   state: ResourceState;
   resource?: Resource;
-  promise: Promise<ResourceLoaderResponse<Resource, RemoteResource>>
+  promise: Promise<ResourceLoaderResponse<Resource, RemoteResource>>;
   error?: Error;
 }
 
@@ -67,7 +75,8 @@ export enum ResourceManagerCommand {
   Disposed = "disposed",
 }
 
-export interface LoadedResourceMessage<RemoteResource = undefined> extends IResourceMessage {
+export interface LoadedResourceMessage<RemoteResource = undefined>
+  extends IResourceMessage {
   command: ResourceManagerCommand.Loaded;
   resourceId: number;
   remoteResource?: RemoteResource;
@@ -90,7 +99,9 @@ export interface ResourceDefinition {
   [key: string]: any;
 }
 
-export function createResourceManager(postMessageTarget: IPostMessageTarget): ResourceManager {
+export function createResourceManager(
+  postMessageTarget: IPostMessageTarget
+): ResourceManager {
   const buffer = new SharedArrayBuffer(4);
 
   return {
@@ -127,13 +138,18 @@ export function processRemoteResourceMessage(
   }
 }
 
-async function loadResource<Def extends ResourceDefinition, Resource, RemoteResource = undefined>(
+async function loadResource<
+  Def extends ResourceDefinition,
+  Resource,
+  RemoteResource = undefined
+>(
   manager: ResourceManager,
   resourceId: number,
   resourceDef: Def
 ): Promise<ResourceInfo<Resource, RemoteResource>> {
   const { type } = resourceDef;
-  const loader: ResourceLoader<Def, Resource, RemoteResource> = manager.resourceLoaders.get(type);
+  const loader: ResourceLoader<Def, Resource, RemoteResource> =
+    manager.resourceLoaders.get(type);
 
   if (!loader) {
     throw new Error(`Resource loader ${type} not registered.`);
@@ -163,11 +179,14 @@ async function loadResource<Def extends ResourceDefinition, Resource, RemoteReso
     resourceInfo.resource = response.resource;
     resourceInfo.state = ResourceState.Loaded;
 
-    manager.postMessageTarget.postMessage({
-      command: ResourceManagerCommand.Loaded,
-      resourceId,
-      remoteResource: response.remoteResource,
-    } as LoadedResourceMessage<RemoteResource>, response.transferList);
+    manager.postMessageTarget.postMessage(
+      {
+        command: ResourceManagerCommand.Loaded,
+        resourceId,
+        remoteResource: response.remoteResource,
+      } as LoadedResourceMessage<RemoteResource>,
+      response.transferList
+    );
   } catch (error) {
     console.error(error);
     resourceInfo.state = ResourceState.Error;
@@ -213,7 +232,7 @@ function removeResourceRef(manager: ResourceManager, resourceId: number) {
     }
 
     manager.store.delete(resourceId);
-    
+
     manager.postMessageTarget.postMessage({
       command: ResourceManagerCommand.Disposed,
       resourceId,
@@ -225,4 +244,18 @@ function removeResourceRef(manager: ResourceManager, resourceId: number) {
 
     resourceInfo.refCount--;
   }
+}
+
+export async function asyncLoadResource<Resource>(
+  manager: ResourceManager,
+  resourceId: number
+): Promise<Resource | undefined> {
+  const resourceInfo = manager.store.get(resourceId);
+
+  if (resourceInfo) {
+    const response = await resourceInfo.promise;
+    return response.resource;
+  }
+
+  return undefined;
 }
