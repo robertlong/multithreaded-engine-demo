@@ -171,7 +171,7 @@ function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManag
   registerRemoteResourceLoader(resourceManager, MaterialRemoteResourceLoader);
   registerRemoteResourceLoader(resourceManager, MeshRemoteResourceLoader);
 
-  state.gltfResourceId = loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
+  // state.gltfResourceId = loadRemoteGLTF(state.resourceManager, "/OutdoorFestival.glb");
   
   createCamera(0);
 
@@ -184,10 +184,13 @@ function start(frameRate: number, tripleBuffer: TripleBufferState, resourceManag
   update();
 }
 
+const inputReadSystem = () => {
+  swapReadBuffer(state.inputTripleBuffer)
+}
+
 const cameraMoveSystem = (dt) => {
   const eid = 0;
   const position = Transform.position[eid];
-  swapReadBuffer(state.inputTripleBuffer)
   const readableIndex = getReadBufferIndex(state.inputTripleBuffer);
   const inputState = state.inputStates[readableIndex];
   if (getInputButtonHeld(inputState, Input.ArrowUp))
@@ -209,8 +212,6 @@ const up = new RAPIER.Vector3(0,speed,0);
 const cubeMoveSystem = (dt) => {
   const eid = 1;
   const rigidBody = rigidBodies[eid];
-  const position = Transform.position[eid];
-  swapReadBuffer(state.inputTripleBuffer)
   const readableIndex = getReadBufferIndex(state.inputTripleBuffer);
   const inputState = state.inputStates[readableIndex];
   if (getInputButtonHeld(inputState, Input.KeyW))
@@ -223,16 +224,6 @@ const cubeMoveSystem = (dt) => {
     rigidBody.applyImpulse(right, true);
   if (getInputButtonHeld(inputState, Input.Space))
     rigidBody.applyImpulse(up, true);
-}
-
-const rotationSystem = (dt) => {
-  for (let i = 1; i < entities.length; i++) {
-    const eid = entities[i];
-    const rotation = Transform.rotation[eid];
-    rotation[0] += 0.5 * dt;
-    rotation[1] += 0.5 * dt;
-    rotation[2] += 0.5 * dt;
-  }
 }
 
 let createdScene = false;
@@ -275,8 +266,8 @@ const physicsSystem = (dt) => {
 
 const pipeline = (dt) => {
   gltfLoaderSystem();
+  inputReadSystem();
   cameraMoveSystem(dt);
-  // rotationSystem(dt);
   cubeMoveSystem(dt);
   physicsSystem(dt);
 }

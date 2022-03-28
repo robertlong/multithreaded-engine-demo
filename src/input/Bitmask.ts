@@ -1,6 +1,6 @@
-const bitsPerMask = Uint32Array.BYTES_PER_ELEMENT * 8;
 
 export const flagOn = (view, i) => {
+  const bitsPerMask = view.BYTES_PER_ELEMENT * 8;
   const masksIndex = Math.floor(i/bitsPerMask)
   const index = i - bitsPerMask*masksIndex
   const bitflag = Math.pow(2,index)
@@ -8,6 +8,7 @@ export const flagOn = (view, i) => {
 }
 
 export const flagOff = (view, i) => {
+  const bitsPerMask = view.BYTES_PER_ELEMENT * 8;
   const masksIndex = Math.floor(i/bitsPerMask)
   const index = i - bitsPerMask*masksIndex
   const bitflag = Math.pow(2,index)
@@ -20,6 +21,7 @@ export const flagSet = (view, i,v) => {
 }
 
 export const flagGet = (view, i) => {
+  const bitsPerMask = view.BYTES_PER_ELEMENT * 8;
   const masksIndex = Math.floor(i/bitsPerMask)
   const index = i - bitsPerMask*masksIndex
   const bitflag = Math.pow(2,index)
@@ -27,6 +29,7 @@ export const flagGet = (view, i) => {
 }
 
 export const flagToggle = (view, i) => {
+  const bitsPerMask = view.BYTES_PER_ELEMENT * 8;
   const masksIndex = Math.floor(i/bitsPerMask)
   const index = i - bitsPerMask*masksIndex
   const bitflag = Math.pow(2,index)

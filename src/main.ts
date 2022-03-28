@@ -1,8 +1,8 @@
 import GameWorker from "./GameWorker?worker&inline";
 import { InputArray } from "./input/InputKeys";
-import { bindInputState, createInputState } from "./input/InputManager";
+import { bindInputEvents, createInputState, resetInputState } from "./input/InputManager";
 import "./live-reload";
-import { copyToWriteBuffer, createTripleBuffer, swapWriteBuffer } from "./TripleBuffer";
+import { copyToWriteBuffer, createTripleBuffer, swapReadBuffer, swapWriteBuffer } from "./TripleBuffer";
 
 async function main() {
   const canvas = document.getElementById("canvas");
@@ -20,7 +20,7 @@ async function main() {
     swapWriteBuffer(inputTripleBuffer);
   };
 
-  bindInputState(inputState, canvas);
+  bindInputEvents(inputState, canvas);
 
   inputUpdateLoop();
 

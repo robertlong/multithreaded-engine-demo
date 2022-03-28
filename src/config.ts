@@ -1,1 +1,1 @@
-export const maxEntities = 200;
+export const maxEntities = 2000;
