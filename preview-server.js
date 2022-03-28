@@ -6,6 +6,10 @@ import { WebSocketServer } from "ws";
 const devServerConfig = {
   ...config,
   mode: "preview",
+  build: {
+    minify: false,
+    sourcemap: true,
+  },
   preview: {
     ...config.preview,
     open: true,
